@@ -37,14 +37,6 @@ indent_size = 2
 [*.html]
 indent_size = 2
 
-# Rust files (Tauri)
-[*.rs]
-indent_size = 4
-
-# TOML files (Cargo.toml)
-[*.toml]
-indent_size = 2
-
 # Shell scripts
 [*.sh]
 indent_size = 2
@@ -63,6 +55,6 @@ indent_style = tab
 indent_size = 2
 
 # Lock files (don't modify)
-[{pnpm-lock.yaml,package-lock.json,yarn.lock,Cargo.lock}]
+[{pnpm-lock.yaml,package-lock.json,yarn.lock}]
 indent_size = 2
 insert_final_newline = false

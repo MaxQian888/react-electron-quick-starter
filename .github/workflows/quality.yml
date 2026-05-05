@@ -68,6 +68,9 @@ jobs:
       - name: TypeScript type checking
         run: pnpm typecheck
 
+      - name: TypeScript type checking (Electron main + preload)
+        run: pnpm exec tsc -p electron/tsconfig.json --noEmit
+
       - name: Security audit
         run: pnpm audit --audit-level=moderate
         continue-on-error: true

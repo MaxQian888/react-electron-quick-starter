@@ -8,7 +8,7 @@ name: Release
 #
 # This workflow:
 # 1. Runs quality checks and tests
-# 2. Builds Tauri desktop applications for all platforms
+# 2. Builds Electron desktop applications for all platforms
 # 3. Creates a draft GitHub release with all artifacts
 # ============================================================================
 
@@ -32,16 +32,16 @@ jobs:
     name: Test Suite
     uses: ./.github/workflows/test.yml
 
-  # Build Tauri apps for all platforms
-  build-tauri:
-    name: Build Tauri
+  # Build Electron apps for all platforms
+  build-electron:
+    name: Build Electron
     needs: [quality, test]
-    uses: ./.github/workflows/build-tauri.yml
+    uses: ./.github/workflows/build-electron.yml
 
   # Create the GitHub release
   create-release:
     name: Create Release
-    needs: [quality, test, build-tauri]
+    needs: [quality, test, build-electron]
     runs-on: ubuntu-latest
 
     permissions:
@@ -70,5 +70,6 @@ jobs:
             artifacts/**/*.msi
             artifacts/**/*.exe
             artifacts/**/*.dmg
+            artifacts/**/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

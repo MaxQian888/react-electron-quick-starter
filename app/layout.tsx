@@ -1,4 +1,4 @@
-// NOTE: The Tauri production CSP is set in src-tauri/tauri.conf.json.
+// NOTE: The Electron production CSP is set in electron/main.ts (PROD_CSP / DEV_CSP).
 // If you call an external API from the browser, add its origin to the
 // `connect-src` directive there, otherwise the request will be blocked.
 import type { Metadata } from "next"

@@ -36,33 +36,33 @@ See [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md).
 ### Prerequisites
 
 - **Node.js** 20.x or later
-- **pnpm** 8.x or later
-- **Rust** 1.70+ (for Tauri development)
+- **pnpm** 10.x or later
+
+No native toolchain is required — `pnpm install` downloads the Electron binary automatically (whitelisted via `pnpm.onlyBuiltDependencies`).
 
 ### Installation
 
 ```bash
-# Install dependencies
+# Install dependencies (also fetches the Electron binary)
 pnpm install
 
-# Start development server
+# Start development server (web only)
 pnpm dev
 
-# For Tauri desktop development
-pnpm tauri dev
+# For Electron desktop development (concurrently runs Next.js + Electron)
+pnpm electron:dev
 ```
 
 ### Verify Setup
 
 ```bash
-# Run linting
+# Run linting, type-check, and tests
 pnpm lint
-
-# Run tests
+pnpm typecheck
 pnpm test
 
-# Check Tauri environment
-pnpm tauri info
+# Sanity-check the Electron compile pipeline
+pnpm electron:compile
 ```
 
 ## Making Changes
