@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-React + Tauri desktop application starter: Next.js 16 (React 19) + Tauri 2.9 + TypeScript + Tailwind CSS v4 + shadcn/ui + Zustand.
+React + Electron desktop application starter: Next.js 16 (React 19) + Electron + electron-builder + TypeScript + Tailwind CSS v4 + shadcn/ui + Zustand.
 
 **Dual Runtime Model:**
 
 - **Web mode** (`pnpm dev`): Next.js dev server at <http://localhost:3000>
-- **Desktop mode** (`pnpm tauri dev`): Tauri wraps Next.js in a native window
+- **Desktop mode** (`pnpm electron:dev`): Concurrently starts Next.js + Electron; the main process loads `http://localhost:3000` in dev and `out/index.html` over `file://` in production builds.
 
 ## Development Commands
 
@@ -28,10 +28,13 @@ pnpm test             # Run Jest tests
 pnpm test:watch       # Run tests in watch mode
 pnpm test:coverage    # Run tests with coverage report
 
-# Desktop (Tauri)
-pnpm tauri dev        # Dev mode with hot reload
-pnpm tauri build      # Build desktop installer
-pnpm tauri info       # Check Tauri environment
+# Desktop (Electron)
+pnpm electron:dev          # Concurrent Next.js + Electron dev with hot reload
+pnpm electron:compile      # Compile main+preload TS → dist-electron/
+pnpm electron:build        # Build current platform installers (release/)
+pnpm electron:build:win    # Windows: NSIS + MSI
+pnpm electron:build:mac    # macOS: DMG + ZIP (x64 + arm64)
+pnpm electron:build:linux  # Linux: AppImage + deb
 
 # Docs site (pnpm workspace — port 3001)
 pnpm docs:dev         # Start Fumadocs dev server
@@ -48,10 +51,10 @@ pnpm dlx shadcn@latest add <component-name>
 
 This is a **pnpm monorepo** with two packages:
 
-| Package  | Path       | Port | Purpose                                          |
-| -------- | ---------- | ---- | ------------------------------------------------ |
-| Main app | `/` (root) | 3000 | Next.js + Tauri desktop app (`output: "export"`) |
-| Docs     | `docs/`    | 3001 | Fumadocs documentation site (full server mode)   |
+| Package  | Path       | Port | Purpose                                             |
+| -------- | ---------- | ---- | --------------------------------------------------- |
+| Main app | `/` (root) | 3000 | Next.js + Electron desktop app (`output: "export"`) |
+| Docs     | `docs/`    | 3001 | Fumadocs documentation site (full server mode)      |
 
 Root `pnpm-lock.yaml` is the single lockfile for all packages. Run `pnpm install` from the repo root.
 
@@ -88,12 +91,15 @@ All components are pre-installed — import directly, do not run `shadcn add` fo
 
 `TooltipProvider` is already mounted in `app/layout.tsx` — no extra wrapper needed.
 
-### Tauri Integration
+### Electron Integration
 
-- `src-tauri/` - Rust backend
-  - `tauri.conf.json` - Config pointing `frontendDist` to `../out`
-  - `beforeDevCommand`: runs `pnpm dev`
-  - `beforeBuildCommand`: runs `pnpm build`
+- `electron/main.ts` - Main process: `BrowserWindow` (800×600), CSP via `session.webRequest.onHeadersReceived`, IPC handlers via `ipcMain.handle`. Loads `process.env.ELECTRON_START_URL` (dev) or `out/index.html` from `app.getAppPath()` (prod).
+- `electron/preload.ts` - `contextBridge.exposeInMainWorld('electronAPI', {...})` exposes a typed surface to the renderer; `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`.
+- `electron/ipc/<name>.ts` - Pure IPC handlers, unit-testable.
+- `electron/tsconfig.json` - Compiles main + preload to `dist-electron/` (CommonJS).
+- `lib/electron.ts` - SOLE caller of `window.electronAPI` from the renderer.
+- `types/electron.d.ts` - Augments global `Window` with `electronAPI` typing.
+- `package.json` `build` block - electron-builder config (NSIS+MSI on Windows, DMG+ZIP on macOS, AppImage+deb on Linux). Output goes to `release/`.
 
 ### Styling System
 
@@ -120,9 +126,9 @@ cn("base-classes", condition && "conditional", className)
 ```
 
 ```tsx
-// Calling Rust from the frontend (Tauri only) — see lib/tauri.ts
-import { greet, isTauri } from "@/lib/tauri"
-if (isTauri()) {
+// Calling the Electron main process from the frontend — see lib/electron.ts
+import { greet, isElectron } from "@/lib/electron"
+if (isElectron()) {
   greet("World").then((msg) => console.log(msg))
 }
 ```
@@ -130,8 +136,9 @@ if (isTauri()) {
 ## Critical Notes
 
 - **Always use pnpm** (lockfile present); run `pnpm install` from repo root to install all workspaces
-- **Tauri production builds require static export**: `next.config.ts` (main app) has `output: "export"` — do not remove it
+- **Electron production builds require static export**: `next.config.ts` (main app) has `output: "export"` so the main process can `loadFile('out/index.html')` — do not remove it
 - **Docs does NOT use static export**: `docs/next.config.ts` is full server mode — keep them separate
-- **Rust toolchain**: Requires v1.77.2+ for Tauri builds
+- **No Rust/native toolchain required**: pure Node.js + pnpm. Electron downloads its own Chromium binary (whitelisted via `pnpm.onlyBuiltDependencies`).
+- **`electron/` is its own TypeScript project**: root `tsconfig.json` excludes it; main+preload are compiled by `pnpm electron:compile` using `electron/tsconfig.json` (CommonJS, outputs to `dist-electron/`).
 - **Docs `.source/` is generated**: run `pnpm docs:dev` or `pnpm docs:build` once before TypeScript resolves `collections/server`
 - shadcn/ui configured with "new-york" style and RSC mode

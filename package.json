@@ -1,11 +1,15 @@
 {
   "name": "react-quick-starter",
   "version": "0.1.0",
+  "description": "Next.js + Electron quick-starter desktop application",
+  "author": "AstroAir <astro_air@126.com>",
+  "license": "MIT",
   "private": true,
   "engines": {
     "node": ">=20.0.0"
   },
   "packageManager": "pnpm@10.30.3",
+  "main": "dist-electron/main.js",
   "scripts": {
     "prepare": "husky",
     "dev": "next dev",
@@ -19,6 +23,13 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "electron:compile": "tsc -p electron/tsconfig.json",
+    "electron:compile:watch": "tsc -p electron/tsconfig.json --watch",
+    "electron:dev": "concurrently -k -n NEXT,ELECTRON -c blue,green \"pnpm dev\" \"wait-on http://localhost:3000 && pnpm electron:compile && cross-env NODE_ENV=development ELECTRON_START_URL=http://localhost:3000 electron .\"",
+    "electron:build": "pnpm build && pnpm electron:compile && electron-builder",
+    "electron:build:win": "pnpm build && pnpm electron:compile && electron-builder --win",
+    "electron:build:mac": "pnpm build && pnpm electron:compile && electron-builder --mac",
+    "electron:build:linux": "pnpm build && pnpm electron:compile && electron-builder --linux",
     "docs:dev": "pnpm -F docs dev",
     "docs:build": "pnpm -F docs build",
     "docs:start": "pnpm -F docs start"
@@ -27,7 +38,6 @@
     "@base-ui/react": "^1.4.1",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-slot": "^1.2.4",
-    "@tauri-apps/api": "^2.11.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -64,7 +74,6 @@
     "@commitlint/cli": "^20.5.3",
     "@commitlint/config-conventional": "^20.5.3",
     "@tailwindcss/postcss": "^4.2.4",
-    "@tauri-apps/cli": "^2.11.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -73,6 +82,10 @@
     "@types/node": "^22.19.17",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.0.0",
     "eslint-config-prettier": "^10.1.8",
@@ -87,6 +100,94 @@
     "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
     "tw-animate-css": "^1.4.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wait-on": "^8.0.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "electron-builder"
+    ]
+  },
+  "build": {
+    "appId": "com.reactquickstarter.desktop",
+    "productName": "react-quick-starter",
+    "asar": true,
+    "npmRebuild": false,
+    "buildDependenciesFromSource": false,
+    "nodeGypRebuild": false,
+    "directories": {
+      "output": "release",
+      "buildResources": "electron/icons"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "out/**/*",
+      "package.json",
+      "!**/*.{md,markdown,test.ts,test.tsx,spec.ts,spec.tsx,map}",
+      "!{.eslintrc,.prettierrc,.editorconfig,.gitignore,.gitattributes}",
+      "!**/__mocks__/**",
+      "!**/__tests__/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "electron/icons/icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/icons/icon.png",
+      "category": "Development"
+    }
   }
 }

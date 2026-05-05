@@ -7,11 +7,11 @@ name: CI/CD Pipeline
 # Each workflow can also be run independently for better maintainability.
 #
 # Workflow Structure:
-# ├── quality.yml     - Code quality & security checks (ESLint, TypeScript, audit)
-# ├── test.yml        - Test suite with coverage & Next.js build
-# ├── build-tauri.yml - Tauri desktop app builds (Windows, macOS, Linux)
-# ├── deploy.yml      - Deployment workflows (optional, disabled by default)
-# └── release.yml     - GitHub release creation (triggered by version tags)
+# ├── quality.yml        - Code quality & security checks (ESLint, TypeScript, audit)
+# ├── test.yml           - Test suite with coverage & Next.js build
+# ├── build-electron.yml - Electron desktop app builds (Windows, macOS, Linux)
+# ├── deploy.yml         - Deployment workflows (optional, disabled by default)
+# └── release.yml        - GitHub release creation (triggered by version tags)
 #
 # This workflow works OUT-OF-THE-BOX without requiring any secrets.
 # See CI_CD.md for detailed setup instructions for optional features.
@@ -42,8 +42,8 @@ jobs:
     name: Test
     uses: ./.github/workflows/test.yml
 
-  # Step 3: Build Tauri Desktop Apps (after quality & test pass)
-  build-tauri:
-    name: Build Tauri
+  # Step 3: Build Electron Desktop Apps (after quality & test pass)
+  build-electron:
+    name: Build Electron
     needs: [quality, test]
-    uses: ./.github/workflows/build-tauri.yml
+    uses: ./.github/workflows/build-electron.yml

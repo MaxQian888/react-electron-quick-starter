@@ -1,6 +1,6 @@
 # CI/CD Pipeline Documentation
 
-This document provides comprehensive information about the CI/CD pipeline configured for this React + Next.js + Tauri project.
+This document provides comprehensive information about the CI/CD pipeline configured for this React + Next.js + Electron project.
 
 ## Overview
 
@@ -10,7 +10,7 @@ The CI/CD pipeline is implemented using GitHub Actions and includes the followin
 2. **Test Suite** - Unit tests with coverage reporting
 3. **Deploy Preview** - Automatic preview deployments for pull requests
 4. **Deploy Production** - Production deployments (disabled by default)
-5. **Build Tauri** - Cross-platform desktop application builds
+5. **Build Electron** - Cross-platform desktop application builds
 6. **Create Release** - Automated GitHub releases for tagged versions
 
 ## Workflow Triggers
@@ -119,40 +119,33 @@ Automatically deploys preview versions of the application for pull requests.
 - Add time-based deployment windows
 - Require manual approval via GitHub Environments
 
-### 5. Build Tauri Desktop Application
+### 5. Build Electron Desktop Application
 
-**Runs on:** All pushes and pull requests  
-**Duration:** ~10-20 minutes per platform
+**Runs on:** All pushes and pull requests
+**Duration:** ~5-12 minutes per platform
 
 Builds cross-platform desktop applications for:
 
 - **Linux** (x86_64): AppImage and .deb packages
 - **Windows** (x64): MSI and NSIS installers
-- **macOS** (x64 and ARM64): DMG and .app bundles
+- **macOS** (x64 and ARM64): DMG and .zip bundles
 
 **Platform-Specific Requirements:**
 
 #### Linux (Ubuntu)
 
-No additional setup required. System dependencies are installed automatically:
-
-- libgtk-3-dev
-- libwebkit2gtk-4.1-dev
-- libappindicator3-dev
-- librsvg2-dev
-- patchelf
-- libssl-dev
+No additional native dependencies are needed — Electron ships its own Chromium runtime. `electron-builder` handles AppImage/deb packaging directly.
 
 #### Windows
 
-**Optional Code Signing:**
+**Optional Code Signing (electron-builder):**
 
 To enable code signing, add these secrets:
 
-- `WINDOWS_CERTIFICATE` - Base64-encoded PFX certificate
-- `WINDOWS_CERTIFICATE_PASSWORD` - Certificate password
+- `CSC_LINK` - Base64-encoded PFX certificate (or HTTPS URL)
+- `CSC_KEY_PASSWORD` - Certificate password
 
-**How to prepare certificate:**
+**How to prepare the certificate:**
 
 ```powershell
 # Convert PFX to base64
@@ -161,51 +154,56 @@ $base64 = [System.Convert]::ToBase64String($bytes)
 $base64 | Out-File certificate.txt
 ```
 
+Reference both env vars in `.github/workflows/build-electron.yml` (the env block is provided as a comment template).
+
 #### macOS
 
 **Optional Code Signing and Notarization:**
 
-To enable code signing and notarization, add these secrets:
+electron-builder accepts the following secrets:
 
-- `APPLE_CERTIFICATE` - Base64-encoded .p12 certificate
-- `APPLE_CERTIFICATE_PASSWORD` - Certificate password
+- `APPLE_CERTIFICATE` - Base64-encoded .p12 certificate (often passed as `CSC_LINK` for electron-builder)
+- `APPLE_CERTIFICATE_PASSWORD` - Certificate password (`CSC_KEY_PASSWORD`)
 - `APPLE_SIGNING_IDENTITY` - Developer ID Application identity
-- `APPLE_ID` - Apple ID email
-- `APPLE_PASSWORD` - App-specific password
+- `APPLE_ID` - Apple ID email (`APPLE_ID`)
+- `APPLE_PASSWORD` - App-specific password (`APPLE_APP_SPECIFIC_PASSWORD`)
 - `APPLE_TEAM_ID` - Apple Developer Team ID
 
 **How to prepare certificate:**
 
 ```bash
-# Export certificate from Keychain as .p12
-# Then convert to base64
+# Export certificate from Keychain as .p12, then convert to base64
 base64 -i certificate.p12 -o certificate.txt
 ```
 
-**How to create app-specific password:**
+**How to create an app-specific password:**
 
 1. Go to <https://appleid.apple.com>
 2. Sign in with your Apple ID
 3. Go to Security > App-Specific Passwords
 4. Generate a new password
 
-**Tauri Configuration:**
+**Electron-builder Configuration:**
 
-Update `src-tauri/tauri.conf.json` for code signing:
+The `build` block in `package.json` is the source of truth. To enable signing/notarization:
 
-```json
+```jsonc
 {
-  "bundle": {
-    "macOS": {
-      "signingIdentity": "Developer ID Application: Your Name (TEAM_ID)",
-      "entitlements": "path/to/entitlements.plist"
+  "build": {
+    "mac": {
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": {
+        "teamId": "YOUR_TEAM_ID",
+      },
     },
-    "windows": {
-      "certificateThumbprint": null,
-      "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com"
-    }
-  }
+    "win": {
+      "signingHashAlgorithms": ["sha256"],
+      "signAndEditExecutable": true,
+    },
+  },
 }
 ```
 
@@ -236,14 +234,14 @@ The release will be created as a **draft** with:
 
 The pipeline uses multiple caching strategies to improve performance:
 
-1. **pnpm Store Cache** - Caches downloaded packages
+1. **pnpm Store Cache** - Caches downloaded packages (including the Electron binary)
 2. **Next.js Build Cache** - Caches Next.js build outputs
-3. **Rust Cache** - Caches Rust dependencies and build artifacts
+3. **electron-builder Cache** - `~/.cache/electron-builder` and `~/.cache/electron` (covered automatically by `actions/setup-node` + pnpm cache for the install step)
 
 **Expected Speed Improvements:**
 
-- First run: ~15-25 minutes (full build)
-- Cached runs: ~5-10 minutes (incremental build)
+- First run: ~10-15 minutes (full build, includes Electron binary download)
+- Cached runs: ~3-6 minutes
 
 ## Concurrency Control
 
@@ -266,7 +264,7 @@ All jobs upload artifacts that are retained for 7-30 days:
 | `test-results`    | 30 days   | JUnit XML test results       |
 | `coverage-report` | 30 days   | HTML coverage reports        |
 | `nextjs-build`    | 7 days    | Built Next.js application    |
-| `tauri-*`         | 30 days   | Platform-specific installers |
+| `electron-*`      | 30 days   | Platform-specific installers |
 
 ## Required GitHub Secrets
 
@@ -282,8 +280,8 @@ All jobs upload artifacts that are retained for 7-30 days:
 
 ### For Windows Code Signing (Optional)
 
-- `WINDOWS_CERTIFICATE`
-- `WINDOWS_CERTIFICATE_PASSWORD`
+- `CSC_LINK` (base64 PFX or HTTPS URL)
+- `CSC_KEY_PASSWORD`
 
 ### For macOS Code Signing (Optional)
 
@@ -303,19 +301,19 @@ All jobs upload artifacts that are retained for 7-30 days:
 3. Check for environment-specific issues
 4. Review test logs in GitHub Actions
 
-### Tauri Build Failing
+### Electron Build Failing
 
-1. **Linux:** Check system dependencies are installed
-2. **Windows:** Verify Rust toolchain is properly set up
-3. **macOS:** Check Xcode Command Line Tools are available
-4. Review Tauri configuration in `src-tauri/tauri.conf.json`
+1. **All platforms:** Try a clean install — `rm -rf node_modules dist-electron release && pnpm install`
+2. **Linux:** Verify the runner has FUSE 2 available (used by AppImage); GitHub-hosted Ubuntu has it by default.
+3. **Windows / macOS:** Confirm `pnpm electron:compile` succeeds locally — most build failures are TS errors caught earlier.
+4. Inspect `release/` artifacts when uploaded with `if-no-files-found: warn` — the workflow logs the directory listing.
 
 ### Code Signing Issues
 
 1. Verify secrets are properly set in GitHub
 2. Check certificate validity and expiration
 3. Ensure signing identity matches certificate
-4. Review Tauri documentation for platform-specific requirements
+4. Review electron-builder docs for platform-specific requirements: <https://www.electron.build/code-signing>
 
 ### Deployment Failures
 
@@ -366,7 +364,8 @@ Add Slack notifications using the `slack-send` action.
 ## Additional Resources
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [Tauri Documentation](https://tauri.app/v1/guides/)
+- [Electron Documentation](https://www.electronjs.org/docs/latest)
+- [electron-builder Documentation](https://www.electron.build/)
 - [Next.js Deployment](https://nextjs.org/docs/deployment)
 - [Vercel Documentation](https://vercel.com/docs)
-- [Code Signing Guide](https://tauri.app/v1/guides/distribution/sign-macos)
+- [electron-builder Code Signing Guide](https://www.electron.build/code-signing)

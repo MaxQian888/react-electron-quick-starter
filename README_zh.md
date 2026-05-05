@@ -1,13 +1,13 @@
 # React Quick Starter
 
-一个现代化的全栈启动模板，结合了用于 Web 应用的 **Next.js 16** 和 **React 19**，以及用于跨平台桌面应用的 **Tauri 2.9**。使用 TypeScript、Tailwind CSS v4 和 shadcn/ui 组件构建。
+一个现代化的全栈启动模板，结合了用于 Web 应用的 **Next.js 16** 和 **React 19**，以及用于跨平台桌面应用的 **Electron** + **electron-builder**。使用 TypeScript、Tailwind CSS v4 和 shadcn/ui 组件构建。
 
 [English Documentation](./README.md)
 
 ## 特性
 
 - ⚡️ **Next.js 16** 配合 App Router 和 React 19
-- 🖥️ **Tauri 2.9** 用于原生桌面应用（Windows、macOS、Linux）
+- 🖥️ **Electron** 用于原生桌面应用（Windows、macOS、Linux），通过 electron-builder 打包
 - 🎨 **Tailwind CSS v4** 支持 CSS 变量和暗色模式
 - 🧩 **shadcn/ui** 组件库，基于 Radix UI 原语
 - 📦 **Zustand** 轻量级状态管理
@@ -30,20 +30,9 @@
   npm install -g pnpm
   ```
 
-### 桌面开发所需（额外要求）
+### 桌面开发所需
 
-- **Rust** 1.70 或更高版本（[安装](https://www.rust-lang.org/tools/install)）
-
-  ```bash
-  # 验证安装
-  rustc --version
-  cargo --version
-  ```
-
-- **系统依赖**（因操作系统而异）：
-  - **Windows**：Microsoft Visual Studio C++ 生成工具
-  - **macOS**：Xcode 命令行工具
-  - **Linux**：参见 [Tauri 前置要求](https://tauri.app/v1/guides/getting-started/prerequisites)
+无需额外的原生工具链。`pnpm install` 会自动下载与平台匹配的 Electron 二进制（Electron 已加入 `pnpm.onlyBuiltDependencies` 白名单，允许其 postinstall 脚本运行）。electron-builder 在 Windows / Linux 上无需 Rust、Python 或 Visual Studio Build Tools。macOS 代码签名与公证为可选项。
 
 ## 安装
 
@@ -67,11 +56,11 @@
 3. **验证安装**
 
    ```bash
-   # 检查 Next.js 是否就绪
+   # 检查 Next.js 是否就绪（Web 模式）
    pnpm dev
 
-   # 检查 Tauri 是否就绪（可选，用于桌面开发）
-   pnpm tauri info
+   # 编译 Electron 主进程（健康检查）
+   pnpm electron:compile
    ```
 
 ## 开发
@@ -98,53 +87,86 @@ npm run dev
 
 ### 桌面应用开发
 
-#### 启动 Tauri 开发模式
+#### 启动 Electron 开发模式
 
 ```bash
-pnpm tauri dev
+pnpm electron:dev
 ```
 
-此命令将：
+此命令通过 `concurrently` 同时：
 
-1. 启动 Next.js 开发服务器
-2. 启动 Tauri 桌面应用
-3. 为前端和 Rust 代码启用热重载
+1. 启动 Next.js 开发服务器（`http://localhost:3000`）
+2. 用 `wait-on` 等待服务器就绪后，通过 `tsc` 编译 Electron 主进程
+3. 设置 `ELECTRON_START_URL=http://localhost:3000` 启动 Electron
+4. 启用 Next.js 渲染端的热重载（修改 `electron/` 中的文件后需重新执行 `pnpm electron:compile`）
 
-#### Tauri 开发文件
+#### Electron 开发文件
 
-- `src-tauri/src/main.rs` - Rust 应用主入口点
-- `src-tauri/src/lib.rs` - Rust 库代码
-- `src-tauri/tauri.conf.json` - Tauri 配置
-- `src-tauri/Cargo.toml` - Rust 依赖
+- `electron/main.ts` - 主进程：`BrowserWindow`、应用生命周期、CSP（通过 `session.webRequest.onHeadersReceived`）、IPC 处理器
+- `electron/preload.ts` - 通过 `contextBridge.exposeInMainWorld('electronAPI', {...})` 向渲染进程暴露类型化接口
+- `electron/ipc/<name>.ts` - 纯函数 IPC 处理器（可独立单元测试）
+- `electron/tsconfig.json` - 主进程 TS 编译配置（CommonJS，输出到 `dist-electron/`）
+- `electron/icons/` - 构建图标（`icon.ico`、`icon.icns`、`icon.png`）
+- `package.json` 的 `build` 字段 - electron-builder 配置
 
-### 从 JavaScript 调用 Rust
+### 从渲染端调用主进程
 
-该模板内置了一个类型安全的 IPC 桥接示例。使用模式如下：
+该模板内置了一个类型安全的 IPC 桥接示例（`greet`）。新增 IPC 命令的模式如下：
 
-1. **在 `src-tauri/src/commands.rs` 中添加 Rust 命令**：
+1. **在 `electron/ipc/my-command.ts` 中编写纯函数**：
 
-   ```rust
-   #[tauri::command]
-   pub fn my_command(arg: &str) -> Result<String, AppError> {
-     Ok(format!("got {arg}"))
+   ```ts
+   export function myCommand(arg: string): string {
+     if (!arg.trim()) throw new Error("arg cannot be empty")
+     return `got ${arg}`
    }
    ```
 
-2. **在 `src-tauri/src/lib.rs` 中注册命令**：
+2. **在 `electron/main.ts` 的 `registerIpc()` 中注册**：
 
-   ```rust
-   .invoke_handler(tauri::generate_handler![commands::greet, commands::my_command])
+   ```ts
+   import { myCommand } from "./ipc/my-command"
+
+   ipcMain.handle("my-command", (_event, arg: unknown) => {
+     if (typeof arg !== "string") throw new Error("arg must be a string")
+     return myCommand(arg)
+   })
    ```
 
-3. **在 `lib/tauri.ts` 中添加类型化封装函数**：
+3. **在 `electron/preload.ts` 中暴露**：
+
+   ```ts
+   const electronAPI = {
+     greet: (name: string) => ipcRenderer.invoke("greet", name),
+     myCommand: (arg: string) => ipcRenderer.invoke("my-command", arg),
+   } as const
+   ```
+
+4. **在 `types/electron.d.ts` 中扩展类型**：
+
+   ```ts
+   declare global {
+     interface Window {
+       electronAPI?: {
+         greet: (name: string) => Promise<string>
+         myCommand: (arg: string) => Promise<string>
+       }
+     }
+   }
+   ```
+
+5. **在 `lib/electron.ts` 中加入类型化封装**：
 
    ```ts
    export async function myCommand(arg: string): Promise<string> {
-     return invoke<string>("my_command", { arg })
+     if (!window.electronAPI) {
+       throw new Error("myCommand() invoked while not running in Electron")
+     }
+     return window.electronAPI.myCommand(arg)
    }
    ```
 
-`lib/tauri.ts` 是唯一调用 `invoke()` 的地方——业务代码从中导入具名函数，而非直接使用 `invoke`。使用 `isTauri()` 来保护依赖桌面运行时的代码路径。
+`lib/electron.ts` 是唯一调用 `window.electronAPI` 的地方——业务代码从中导入具名函数。使用 `isElectron()` 来保护依赖桌面运行时的代码路径。
 
 ## 可用脚本
 
@@ -164,15 +186,17 @@ pnpm tauri dev
 | `pnpm test:watch`    | 监听模式运行 Jest                                 |
 | `pnpm test:coverage` | 运行 Jest 并生成覆盖率报告                        |
 
-### Tauri（桌面）脚本
+### Electron（桌面）脚本
 
-| 命令                | 描述                            |
-| ------------------- | ------------------------------- |
-| `pnpm tauri dev`    | 启动 Tauri 开发模式，支持热重载 |
-| `pnpm tauri build`  | 构建生产环境的桌面应用          |
-| `pnpm tauri info`   | 显示 Tauri 环境信息             |
-| `pnpm tauri icon`   | 从源图像生成应用图标            |
-| `pnpm tauri --help` | 显示所有可用的 Tauri 命令       |
+| 命令                          | 描述                                       |
+| ----------------------------- | ------------------------------------------ |
+| `pnpm electron:dev`           | 同时启动 Next.js 与 Electron，支持热重载   |
+| `pnpm electron:compile`       | 编译主进程 + preload TS → `dist-electron/` |
+| `pnpm electron:compile:watch` | 主进程编译的 watch 模式                    |
+| `pnpm electron:build`         | 为当前平台构建生产安装包                   |
+| `pnpm electron:build:win`     | 构建 Windows 安装包（NSIS + MSI）          |
+| `pnpm electron:build:mac`     | 构建 macOS 包（DMG + ZIP，x64 + arm64）    |
+| `pnpm electron:build:linux`   | 构建 Linux 包（AppImage + deb）            |
 
 ### 文档站点脚本（Fumadocs — 端口 3001）
 
@@ -206,13 +230,17 @@ react-quick-starter/
 ├── lib/                     # 工具函数
 │   └── utils.ts            # 辅助函数（cn 等）
 ├── public/                  # 静态资源（图片、SVG）
-├── src-tauri/              # Tauri 桌面应用
-│   ├── src/
-│   │   ├── main.rs         # Rust 主入口点
-│   │   └── lib.rs          # Rust 库代码
-│   ├── icons/              # 桌面应用图标
-│   ├── tauri.conf.json     # Tauri 配置
-│   └── Cargo.toml          # Rust 依赖
+├── electron/               # Electron 桌面应用
+│   ├── main.ts             # 主进程入口（BrowserWindow、CSP、IPC）
+│   ├── preload.ts          # 通过 contextBridge 向渲染端暴露类型化 API
+│   ├── ipc/                # 纯函数 IPC 处理器（可独立单测）
+│   │   └── greet.ts
+│   ├── icons/              # 应用图标（ico、icns、png）供 electron-builder 使用
+│   └── tsconfig.json       # CommonJS 编译配置（输出到 dist-electron/）
+├── types/
+│   └── electron.d.ts       # 渲染端 `Window.electronAPI` 类型增强
+├── dist-electron/          # 编译后的主进程 + preload（gitignored）
+├── release/                # electron-builder 输出目录：安装包（gitignored）
 ├── docs/                    # Fumadocs 文档站点（workspace 子包）
 │   ├── app/                # Next.js App Router（文档）
 │   │   ├── layout.tsx      # 根布局，含 RootProvider
@@ -253,30 +281,54 @@ cp .env.example .env.local
 - 切勿将 `.env.local` 提交到版本控制
 - 使用 `.env.example` 记录所需的变量
 
-### Tauri 配置
+### Electron 配置
 
-编辑 `src-tauri/tauri.conf.json` 以自定义您的桌面应用：
+桌面应用配置分散在两处：
 
-```json
-{
-  "productName": "react-quick-starter", // 应用名称
-  "version": "0.1.0", // 应用版本
-  "identifier": "com.reactquickstarter.desktop", // 唯一应用标识符
-  "build": {
-    "frontendDist": "../out", // Next.js 构建输出
-    "devUrl": "http://localhost:3000" // 开发服务器 URL
+**窗口/生命周期/IPC** — `electron/main.ts`（`createWindow()`）：
+
+```ts
+const win = new BrowserWindow({
+  width: 800,
+  height: 600,
+  title: "react-quick-starter",
+  resizable: true,
+  fullscreen: false,
+  webPreferences: {
+    preload: path.join(__dirname, "preload.js"),
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
   },
-  "app": {
-    "windows": [
-      {
-        "title": "react-quick-starter", // 窗口标题
-        "width": 800, // 默认宽度
-        "height": 600, // 默认高度
-        "resizable": true, // 允许调整大小
-        "fullscreen": false // 全屏启动
-      }
-    ]
-  }
+})
+```
+
+**打包** — `package.json` 中的 `build` 字段（electron-builder）：
+
+```jsonc
+{
+  "build": {
+    "appId": "com.reactquickstarter.desktop",
+    "productName": "react-quick-starter",
+    "asar": true,
+    "directories": { "output": "release", "buildResources": "electron/icons" },
+    "files": ["dist-electron/**/*", "out/**/*", "package.json"],
+    "win": {
+      "target": [{ "target": "nsis" }, { "target": "msi" }],
+      "icon": "electron/icons/icon.ico",
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] },
+      ],
+      "icon": "electron/icons/icon.icns",
+    },
+    "linux": {
+      "target": [{ "target": "AppImage" }, { "target": "deb" }],
+      "icon": "electron/icons/icon.png",
+    },
+  },
 }
 ```
 
@@ -323,26 +375,24 @@ pnpm build
 ### 构建桌面应用
 
 ```bash
-# 为当前平台构建
-pnpm tauri build
+# 为当前平台构建（Windows: NSIS+MSI；macOS: DMG+ZIP；Linux: AppImage+deb）
+pnpm electron:build
 
-# 输出位置：
-# - Windows: src-tauri/target/release/bundle/msi/
-# - macOS: src-tauri/target/release/bundle/dmg/
-# - Linux: src-tauri/target/release/bundle/appimage/
+# 输出目录：release/
 ```
 
-构建选项：
+平台快捷指令：
 
 ```bash
-# 为特定目标构建
-pnpm tauri build --target x86_64-pc-windows-msvc
+pnpm electron:build:win    # Windows: NSIS + MSI
+pnpm electron:build:mac    # macOS:   DMG + ZIP（x64 + arm64）
+pnpm electron:build:linux  # Linux:   AppImage + deb
+```
 
-# 使用调试符号构建
-pnpm tauri build --debug
+直接调用 electron-builder（高级标志，例如 `--publish=always`）：
 
-# 不打包构建
-pnpm tauri build --bundles none
+```bash
+pnpm build && pnpm electron:compile && pnpm exec electron-builder --win --x64 --publish=never
 ```
 
 ## 部署
@@ -389,28 +439,28 @@ out
 
 #### Windows
 
-- 分发 `src-tauri/target/release/bundle/msi/` 中的 `.msi` 安装程序
-- 用户运行安装程序以安装应用
+- 分发 `release/` 中的 `.exe`（NSIS，推荐）或 `.msi`
+- NSIS 已配置为 `oneClick: false`，并允许用户自定义安装目录
 
 #### macOS
 
-- 分发 `src-tauri/target/release/bundle/dmg/` 中的 `.dmg` 文件
-- 用户将应用拖到应用程序文件夹
-- **注意**：对于 App Store 之外的分发，您需要使用 Apple 开发者证书对应用进行签名
+- 分发 `release/` 中的 `.dmg`
+- 用户将应用拖到「应用程序」文件夹
+- **注意**：在 App Store 之外分发时，需使用 Developer ID Application 证书签名。在 `package.json` 的 `build.mac.hardenedRuntime` / `build.mac.entitlements` 下配置，并通过环境变量提供签名密钥（详见 `CI_CD.md`）。
 
 #### Linux
 
-- 分发 `src-tauri/target/release/bundle/appimage/` 中的 `.AppImage`
+- 分发 `release/` 中的 `.AppImage`
 - 用户使其可执行并运行：`chmod +x app.AppImage && ./app.AppImage`
-- 替代格式：`.deb`（Debian/Ubuntu）、`.rpm`（Fedora/RHEL）
+- 同时也产出 `.deb`（Debian/Ubuntu）
 
 #### 代码签名（生产环境推荐）
 
-- **Windows**：使用代码签名证书
-- **macOS**：需要 Apple 开发者账户和证书
-- **Linux**：可选，但建议用于分发
+- **Windows**：通过环境变量提供 `CSC_LINK`（PFX）+ `CSC_KEY_PASSWORD`（或在 `package.json` 的 `build.win` 字段配置）
+- **macOS**：需要 Apple 开发者账户；提供 `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` 用于公证
+- **Linux**：可选
 
-详细说明请参见 [Tauri 分发指南](https://tauri.app/v1/guides/distribution/)。
+详细说明请参见 [electron-builder 代码签名指南](https://www.electron.build/code-signing)。
 
 ## 开发工作流
 
@@ -421,7 +471,7 @@ out
    ```bash
    pnpm dev  # 用于 Web 开发
    # 或
-   pnpm tauri dev  # 用于桌面开发
+   pnpm electron:dev  # 用于桌面开发
    ```
 
 2. **进行更改**
@@ -443,8 +493,8 @@ out
 5. **构建和测试**
 
    ```bash
-   pnpm build  # 测试 Web 构建
-   pnpm tauri build  # 测试桌面构建
+   pnpm build           # 测试 Web/静态导出构建
+   pnpm electron:build  # 测试当前平台桌面构建
    ```
 
 ### 最佳实践
@@ -472,18 +522,15 @@ taskkill /PID <PID> /F
 lsof -ti:3000 | xargs kill -9
 ```
 
-**Tauri 构建失败**
+**Electron 构建失败**
 
 ```bash
-# 检查 Tauri 环境
-pnpm tauri info
-
-# 更新 Rust
-rustup update
-
-# 清理构建缓存
-cd src-tauri
-cargo clean
+# 大多数失败来自陈旧的安装或缺失的主进程编译产物。
+# 干净重建：
+rm -rf node_modules dist-electron release
+pnpm install
+pnpm electron:compile
+pnpm electron:build
 ```
 
 **模块未找到错误**
@@ -513,11 +560,11 @@ pnpm docs:dev
 - [学习 Next.js](https://nextjs.org/learn) - 交互式 Next.js 教程
 - [Next.js GitHub](https://github.com/vercel/next.js) - Next.js 仓库
 
-### Tauri 资源
+### Electron 资源
 
-- [Tauri 文档](https://tauri.app/) - Tauri 官方文档
-- [Tauri API 参考](https://tauri.app/v1/api/js/) - JavaScript API 参考
-- [Tauri GitHub](https://github.com/tauri-apps/tauri) - Tauri 仓库
+- [Electron 文档](https://www.electronjs.org/docs/latest) - Electron 官方文档
+- [electron-builder 文档](https://www.electron.build/) - 打包与代码签名指南
+- [Electron GitHub](https://github.com/electron/electron) - Electron 仓库
 
 ### UI 和样式
 
@@ -553,5 +600,6 @@ pnpm docs:dev
 
 - 查看[故障排除](#故障排除)部分
 - 查阅 [Next.js 文档](https://nextjs.org/docs)
-- 查阅 [Tauri 文档](https://tauri.app/)
+- 查阅 [Electron 文档](https://www.electronjs.org/docs/latest)
+- 查阅 [electron-builder 文档](https://www.electron.build/)
 - 在 GitHub 上提出 issue

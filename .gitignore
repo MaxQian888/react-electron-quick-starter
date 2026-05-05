@@ -22,6 +22,10 @@ junit.xml
 /.next/
 /out/
 
+# electron
+/dist-electron/
+/release/
+
 # production
 /build
 

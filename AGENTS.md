@@ -4,10 +4,10 @@
 
 This is a **pnpm monorepo** (`pnpm-workspace.yaml`) with two packages:
 
-| Package  | Root    | Port | Build output                                   |
-| -------- | ------- | ---- | ---------------------------------------------- |
-| Main app | `/`     | 3000 | `out/` (static export for Tauri)               |
-| Docs     | `docs/` | 3001 | `docs/.next/` (server mode, deploy separately) |
+| Package  | Root    | Port | Build output                                       |
+| -------- | ------- | ---- | -------------------------------------------------- |
+| Main app | `/`     | 3000 | `out/` (static export, loaded by Electron in prod) |
+| Docs     | `docs/` | 3001 | `docs/.next/` (server mode, deploy separately)     |
 
 Run `pnpm install` from repo root — single `pnpm-lock.yaml` covers all packages.
 
@@ -15,10 +15,11 @@ Run `pnpm install` from repo root — single `pnpm-lock.yaml` covers all package
 
 - `app/` Next.js App Router (routes: `page.tsx`, `layout.tsx`, global styles in `globals.css`).
 - `components/ui/` shadcn/ui components — **do not add test files here**. All 57 components are pre-installed (see list below).
-- `lib/` Shared utilities (e.g., `lib/utils.ts`).
+- `lib/` Shared utilities (e.g., `lib/utils.ts`, `lib/electron.ts` IPC wrapper).
 - `hooks/` Shared hooks (e.g., `hooks/use-mobile.ts`).
 - `public/` Static assets (SVGs, icons).
-- `src-tauri/` Tauri desktop wrapper (Rust code, config, icons).
+- `electron/` Electron desktop wrapper — TypeScript main process (`main.ts`), preload script (`preload.ts`), IPC handlers (`ipc/`), build icons (`icons/`), and isolated `tsconfig.json` (compiles to `dist-electron/`).
+- `types/electron.d.ts` Renderer-side `Window.electronAPI` type augmentation.
 - Root configs: `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, `postcss.config.mjs`, `components.json`.
 
 ### Docs site (`docs/`)
@@ -61,10 +62,13 @@ pnpm test             # Run Jest tests
 pnpm test:watch       # Run tests in watch mode
 pnpm test:coverage    # Run tests with coverage report
 
-# Desktop (Tauri)
-pnpm tauri dev        # Dev mode with hot reload
-pnpm tauri build      # Build desktop installer
-pnpm tauri info       # Check Tauri environment
+# Desktop (Electron)
+pnpm electron:dev          # Concurrent Next.js + Electron dev with hot reload
+pnpm electron:compile      # Compile main+preload TS → dist-electron/
+pnpm electron:build        # Build current-platform installers (release/)
+pnpm electron:build:win    # Windows: NSIS + MSI
+pnpm electron:build:mac    # macOS: DMG + ZIP (x64 + arm64)
+pnpm electron:build:linux  # Linux: AppImage + deb
 
 # Docs site (port 3001) — pnpm workspace package at docs/
 pnpm docs:dev         # Start Fumadocs dev server (also generates docs/.source/)
@@ -102,4 +106,4 @@ pnpm dlx shadcn@latest add <component-name>
 
 - Use `.env.local` for secrets; do not commit `.env*` files.
 - Only expose safe client values via `NEXT_PUBLIC_*`.
-- Tauri: minimize capabilities in `src-tauri/tauri.conf.json`; avoid broad filesystem access.
+- Electron: keep `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false` in `electron/main.ts`. Add IPC commands explicitly (no broad bridges). Tighten the CSP in `PROD_CSP`/`DEV_CSP` if you add external origins.

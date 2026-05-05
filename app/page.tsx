@@ -1,5 +1,5 @@
 import Image from "next/image"
-import { TauriDemo } from "@/components/tauri-demo"
+import { ElectronDemo } from "@/components/electron-demo"
 
 export default function Home() {
   return (
@@ -60,8 +60,8 @@ export default function Home() {
             Documentation
           </a>
         </div>
-        {/* Remove this and lib/tauri.ts when not using Tauri IPC */}
-        <TauriDemo />
+        {/* Remove this and lib/electron.ts when not using Electron IPC */}
+        <ElectronDemo />
       </main>
     </div>
   )

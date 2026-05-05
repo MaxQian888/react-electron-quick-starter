@@ -23,11 +23,21 @@ const config: Config = {
     "app/**/*.{js,jsx,ts,tsx}",
     "components/**/*.{js,jsx,ts,tsx}",
     "lib/**/*.{js,jsx,ts,tsx}",
+    "electron/**/*.ts",
+    // shadcn/ui components are vendored verbatim from the registry — they are
+    // tested upstream and treated here as third-party UI primitives.
+    "!components/ui/**",
+    // The Electron entrypoints orchestrate live IPC + BrowserWindow APIs;
+    // their seams (greet handler, protocol resolver) are unit-tested instead.
+    "!electron/main.ts",
+    "!electron/preload.ts",
     "!**/*.d.ts",
     "!**/node_modules/**",
     "!**/.next/**",
     "!**/coverage/**",
     "!**/out/**",
+    "!**/dist-electron/**",
+    "!**/release/**",
   ],
 
   // The directory where Jest should output its coverage files
@@ -104,12 +114,17 @@ const config: Config = {
     // Handle image imports
     "^.+\\.(png|jpg|jpeg|gif|webp|avif|ico|bmp|svg)$/i": "<rootDir>/__mocks__/fileMock.js",
 
-    // Mock Tauri API for Jest (not available in jsdom)
-    "^@tauri-apps/api/core$": "<rootDir>/__mocks__/tauri-api.js",
+    // Mock Electron module for Jest (not available outside Electron runtime)
+    "^electron$": "<rootDir>/__mocks__/electron.js",
   },
 
   // An array of regexp pattern strings, matched against all module paths before considered 'visible' to the module loader
-  modulePathIgnorePatterns: ["<rootDir>/out/", "<rootDir>/.next/"],
+  modulePathIgnorePatterns: [
+    "<rootDir>/out/",
+    "<rootDir>/.next/",
+    "<rootDir>/dist-electron/",
+    "<rootDir>/release/",
+  ],
 
   // Activates notifications for test results
   // notify: false,
@@ -187,7 +202,7 @@ const config: Config = {
   testMatch: ["**/__tests__/**/*.?([mc])[jt]s?(x)", "**/?(*.)+(spec|test).?([mc])[jt]s?(x)"],
 
   // An array of regexp pattern strings that are matched against all test paths, matched tests are skipped
-  testPathIgnorePatterns: ["/node_modules/", "/.next/", "/out/", "/src-tauri/"],
+  testPathIgnorePatterns: ["/node_modules/", "/.next/", "/out/", "/dist-electron/", "/release/"],
 
   // The regexp pattern or array of patterns that Jest uses to detect test files
   // testRegex: [],

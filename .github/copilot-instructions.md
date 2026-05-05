@@ -2,18 +2,18 @@
 
 ## Project Architecture
 
-This is a **Next.js 16 (App Router) + Tauri v2 hybrid desktop application** combining:
+This is a **Next.js 16 (App Router) + Electron hybrid desktop application** combining:
 
 - **Frontend**: React 19 + TypeScript + Tailwind CSS v4 + shadcn/ui components
-- **Desktop wrapper**: Tauri v2.9 (Rust-based) for native desktop capabilities
+- **Desktop wrapper**: Electron + electron-builder, main process written in TypeScript
 - **State management**: Zustand (configured but not actively used in starter)
 
 ### Dual Runtime Model
 
 1. **Web mode** (`pnpm dev`): Next.js dev server at http://localhost:3000
-2. **Desktop mode** (`pnpm tauri dev`): Tauri wraps the Next.js app in a native window
+2. **Desktop mode** (`pnpm electron:dev`): Concurrently runs `next dev` and Electron; main process loads `http://localhost:3000`. In production builds, Electron loads the static export at `out/index.html` over `file://`.
 
-⚠️ **Critical**: When Tauri builds for production, it expects static export from Next.js (`out/` directory). The `tauri.conf.json` points `frontendDist` to `../out`, but Next.js currently uses default (server-side) mode. To enable Tauri production builds, you must add `output: "export"` to `next.config.ts`.
+The renderer uses Next.js `output: "export"` so production builds produce a static `out/` that Electron can ship inside the bundled app.
 
 ## Key File Locations & Conventions
 
@@ -42,14 +42,15 @@ This is a **Next.js 16 (App Router) + Tauri v2 hybrid desktop application** comb
   - `cn()` utility from `@/lib/utils` (clsx + tailwind-merge)
 - Config: `components.json` defines shadcn settings (New York style, RSC mode)
 
-### Tauri Integration
+### Electron Integration
 
-- `src-tauri/src/lib.rs`: Main Tauri setup (enables debug logging in dev)
-- `src-tauri/tauri.conf.json`:
-  - `devUrl`: Points to Next.js dev server
-  - `frontendDist`: Expects `../out` (static export)
-  - `beforeDevCommand`: Runs `pnpm dev`
-  - `beforeBuildCommand`: Runs `pnpm build`
+- `electron/main.ts`: Main process — creates `BrowserWindow` (800×600), wires CSP, registers `ipcMain.handle('greet', ...)`. Loads `http://localhost:3000` when `ELECTRON_START_URL` is set, otherwise loads `out/index.html` from `app.getAppPath()`.
+- `electron/preload.ts`: Uses `contextBridge.exposeInMainWorld('electronAPI', {...})` to expose a typed API to the renderer. The renderer never touches `ipcRenderer` directly.
+- `electron/ipc/greet.ts`: Pure IPC handler — unit-testable.
+- `electron/tsconfig.json`: Compiles main + preload to `dist-electron/` (CommonJS).
+- `lib/electron.ts`: SOLE caller of `window.electronAPI` from the renderer side. Business code imports named functions from here.
+- `types/electron.d.ts`: Augments `Window` with `electronAPI` typing.
+- `package.json` `build` block: `electron-builder` config (NSIS+MSI on Windows, DMG+ZIP on macOS, AppImage+deb on Linux).
 
 ## Developer Workflows
 
@@ -59,17 +60,17 @@ This is a **Next.js 16 (App Router) + Tauri v2 hybrid desktop application** comb
 
 - `pnpm install` - Install dependencies
 - `pnpm dev` - Next.js dev server (web-only)
-- `pnpm tauri dev` - Desktop app with hot reload
-- `pnpm build` - Next.js production build
-- `pnpm tauri build` - Create desktop installer (requires static export)
+- `pnpm electron:dev` - Desktop app with hot reload (concurrently runs Next.js + Electron)
+- `pnpm build` - Next.js production build (static export to `out/`)
+- `pnpm electron:build` - Build desktop installers (calls `pnpm build` + `pnpm electron:compile` + `electron-builder`)
+- `pnpm electron:build:win|mac|linux` - Platform-specific build
 
 ### Code Quality
 
-- **Type checking**: `pnpm exec tsc --noEmit` (strict mode enabled)
-- **Linting**: `pnpm run lint` (ESLint flat config with `eslint-config-next`)
-  - Auto-fix: `pnpm exec eslint . --fix`
-  - Single file: `pnpm exec eslint <file>`
-- **No test framework configured** (no test scripts present)
+- **Type checking**: `pnpm typecheck` (strict mode enabled; `electron/` has its own tsconfig)
+- **Linting**: `pnpm lint` (ESLint flat config with `eslint-config-next`)
+  - Auto-fix: `pnpm lint:fix`
+- **Tests**: `pnpm test` (Jest + RTL); coverage thresholds 60/60/70/70
 
 ### Adding shadcn/ui Components
 
@@ -110,10 +111,19 @@ Prefer composition patterns with `asChild` for buttons/links:
 - Use `cn()` from `@/lib/utils` to merge Tailwind classes safely
 - Example: `cn("base-classes", conditionalClass && "conditional-classes", className)`
 
+### Electron IPC
+
+- Pattern for adding a new IPC command:
+  1. Pure handler in `electron/ipc/<name>.ts` (testable in isolation).
+  2. Register via `ipcMain.handle('<name>', ...)` in `electron/main.ts`'s `registerIpc()`.
+  3. Expose in `electron/preload.ts` via `contextBridge.exposeInMainWorld('electronAPI', { ..., <name>: (args) => ipcRenderer.invoke('<name>', args) })`.
+  4. Add typed wrapper in `lib/electron.ts` using `window.electronAPI.<name>`.
+  5. Update `types/electron.d.ts` with the new method signature.
+- Always gate desktop-only renderer code behind `isElectron()` so the same component works in both web and desktop modes.
+
 ## Known Configuration Notes
 
 - **ESLint**: Flat config format with Next.js core-web-vitals + TypeScript rules
-- **TypeScript**: Strict mode, bundler module resolution, JSX set to `react-jsx`
-- **Next.js config**: Currently minimal (no custom webpack/rewrites)
-- **Rust toolchain**: Requires v1.77.2+ for Tauri builds
-- **WARP.md exists**: Contains terminal-focused guidance (complementary to this file)
+- **TypeScript**: Strict mode, bundler module resolution, JSX set to `react-jsx`. Root `tsconfig.json` excludes `electron/`, `dist-electron/`, `release/`, `docs/`.
+- **Next.js config**: `output: "export"`, `images.unoptimized: true` so the static export works inside Electron.
+- **No native toolchain required**: Pure Node.js + pnpm. Electron downloads its own Chromium binary on `pnpm install` (`electron` is allow-listed in `pnpm.onlyBuiltDependencies`).

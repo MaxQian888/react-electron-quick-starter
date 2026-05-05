@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "React 快速启动模板",
-    "subtitle": "Next.js 16 + Tauri 2.9 + Tailwind v4 + shadcn/ui",
+    "subtitle": "Next.js 16 + Electron + Tailwind v4 + shadcn/ui",
     "instructionEdit": "编辑开始",
     "instructionSave": "保存即可立即看到变化。",
     "deployNow": "立即部署",
@@ -17,7 +17,7 @@
     "en": "EN",
     "zh-CN": "中"
   },
-  "tauriDemo": {
-    "buttonLabel": "调用 Rust greet()"
+  "electronDemo": {
+    "buttonLabel": "调用 Electron greet()"
   }
 }

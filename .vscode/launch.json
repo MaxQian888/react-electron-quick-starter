@@ -66,25 +66,17 @@
       "skipFiles": ["<node_internals>/**"]
     },
     {
-      "type": "lldb",
+      "name": "Electron: Main",
+      "type": "node",
       "request": "launch",
-      "name": "Tauri Development Debug",
-      "cargo": {
-        "args": ["build", "--manifest-path=./src-tauri/Cargo.toml", "--no-default-features"]
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
+      "runtimeArgs": ["."],
+      "env": {
+        "NODE_ENV": "development",
+        "ELECTRON_START_URL": "http://localhost:3000"
       },
-      // task for the `beforeDevCommand` if used, must be configured in `.vscode/tasks.json`
-      "preLaunchTask": "ui:dev-if-needed",
-      "postDebugTask": "ui:stop"
-    },
-    {
-      "type": "lldb",
-      "request": "launch",
-      "name": "Tauri Production Debug",
-      "cargo": {
-        "args": ["build", "--release", "--manifest-path=./src-tauri/Cargo.toml"]
-      },
-      // task for the `beforeBuildCommand` if used, must be configured in `.vscode/tasks.json`
-      "preLaunchTask": "ui:build"
+      "console": "integratedTerminal"
     }
   ]
 }
