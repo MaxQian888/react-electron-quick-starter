@@ -6,7 +6,7 @@
   "license": "MIT",
   "private": true,
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.22.1"
   },
   "packageManager": "pnpm@10.30.3",
   "main": "dist-electron/main.js",
@@ -93,7 +93,7 @@
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
     "jest-junit": "^17.0.0",
-    "lint-staged": "^15.5.2",
+    "lint-staged": "^17.0.4",
     "prettier": "^3.8.3",
     "shadcn": "^4.7.0",
     "tailwindcss": "^4.2.4",
