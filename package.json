@@ -87,7 +87,7 @@
     "electron": "^33.2.0",
     "electron-builder": "^26.8.1",
     "eslint": "^9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.7",
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "jest": "^30.4.2",
